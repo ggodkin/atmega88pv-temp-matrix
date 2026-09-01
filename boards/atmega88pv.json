@@ -1,0 +1,18 @@
+{
+  "build": {
+    "core": "arduino",
+    "mcu": "atmega88p",
+    "f_cpu": "8000000L",
+    "variant": "standard"
+  },
+  "frameworks": ["arduino"],
+  "name": "ATmega88PV Custom",
+  "upload": {
+    "maximum_ram_size": 1024,
+    "maximum_size": 8192,
+    "protocol": "usbasp"
+  },
+  "url": "https://www.microchip.com/en-us/product/ATmega88PV",
+  "vendor": "Microchip"
+}
+
