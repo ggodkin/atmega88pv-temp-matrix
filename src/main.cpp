@@ -238,7 +238,44 @@ void loop() {
       lastCelsius = c;
       haveTemp = true;
       lastTempMs = now;
-      drawTemperatureDisplay(lastCelsius);
+
+      // Draw temperature shifted down by 2 lines
+      clearMatrix();
+      float f = c * 1.8f + 32.0f;
+      uint32_t color;
+
+      if (f >= TEMP_LOW_THRESHOLD && f <= TEMP_HIGH_THRESHOLD) color = COLOR_GREEN;
+      else if (f > TEMP_HIGH_THRESHOLD) color = COLOR_RED;
+      else color = COLOR_BLUE;
+
+      int yShift = 6; // shift down by 2 lines (original was 4)
+      if (f < 100.0f && f >= 0.0f) {
+        int scaled = (int)(f * 10 + 0.5f);
+        int d1 = (scaled / 100) % 10;
+        int d2 = (scaled / 10) % 10;
+        int d3 = scaled % 10;
+        drawDigit(1, yShift, d1, color);
+        drawDigit(6, yShift, d2, color);
+        drawDigit(11,yShift, d3, color);
+        drawDot(10, yShift, color);
+      } else {
+        int val = (int)(f + 0.5f);
+        if (val > 999) val = 999;
+        int d1 = (val / 100) % 10;
+        int d2 = (val / 10) % 10;
+        int d3 = val % 10;
+        drawDigit(1, yShift, d1, color);
+        drawDigit(6, yShift, d2, color);
+        drawDigit(11,yShift, d3, color);
+      }
+
+      // Draw "F" in top‑right corner
+      // Simple 3x5 block letter F
+      rectangle(DISP_WIDTH-4, 0, 3, 1, color); // top bar
+      rectangle(DISP_WIDTH-4, 1, 1, 4, color); // vertical bar
+      rectangle(DISP_WIDTH-3, 2, 2, 1, color); // middle bar
+
+      strip.show();
     } else {
       haveTemp = false;
       drawNoTempCorners();
