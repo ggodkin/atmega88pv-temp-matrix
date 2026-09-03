@@ -4,7 +4,7 @@
 
 constexpr uint8_t BUTTON_PIN = 2;
 constexpr uint32_t TEMP_INTERVAL_MS = 1000;
-constexpr uint32_t DEBOUNCE_MS = 30;
+constexpr uint32_t DEBOUNCE_MS = 31;
 
 enum class Unit : uint8_t {
   Fahrenheit,

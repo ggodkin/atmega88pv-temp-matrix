@@ -1,144 +1,245 @@
-# ATmega88PV Temperature Matrix — Tight Firmware
+# ATmega88PV 16×16 Temperature Matrix
 
-This is a tighter rewrite of the original 16x16 WS2812B thermometer firmware.
+A compact thermometer built around an **ATmega88PV**, a **16×16 WS2812B LED matrix**, and a **DS18B20 temperature sensor**.
+
+The firmware is designed for the ATmega88PV's limited SRAM while providing a responsive temperature display and push-button Fahrenheit/Celsius selection.
 
 ## Hardware
 
-- ATmega88PV / ATmega88P
-- CPU: 8 MHz
-- 16x16 WS2812B matrix (256 LEDs)
-- DS18B20 temperature sensor
-- USBasp programming
+* ATmega88PV / ATmega88P
+* 8 MHz CPU clock
+* 16×16 WS2812B matrix (256 LEDs)
+* DS18B20 temperature sensor
+* USBasp programmer
 
-Pins are intentionally unchanged from the original project:
+### Pin assignments
 
-| Function | AVR pin | Arduino pin |
-|---|---:|---:|
-| WS2812B DIN | PD7 | 7 |
-| DS18B20 DQ | PD4 | 4 |
+| Function    | AVR pin | Arduino pin |
+| ----------- | ------: | ----------: |
+| WS2812B DIN |     PD7 |           7 |
+| DS18B20 DQ  |     PD4 |           4 |
+| F/C button  |     PD2 |           2 |
 
-The DS18B20 data line requires an external pull-up resistor, typically 4.7 kOhm to VCC.
+The DS18B20 data line requires an external pull-up resistor, typically **4.7 kΩ to VCC**.
 
-## Major changes
+The F/C push button is connected between **PD2 and GND**. The firmware uses the ATmega's internal pull-up resistor, so no external button resistor is required.
 
-### 1. No 768-byte RGB framebuffer
+## Temperature measurement
 
-The original Adafruit_NeoPixel implementation allocates 3 bytes per LED:
+The DS18B20 is operated at **12-bit resolution**.
 
-`256 × 3 = 768 bytes`
+A temperature conversion can take up to approximately **750 ms**. Conversion is performed asynchronously so that the main loop continues running while the sensor is measuring.
 
-That is most of the ATmega88PV's 1 KB SRAM.
+This keeps the push button responsive even while a temperature conversion is in progress.
 
-This rewrite stores a compact one-byte color index per pixel:
+Temperature values are stored using integer arithmetic:
 
-`256 bytes`
+* Fahrenheit is stored in tenths of a degree.
+* Celsius is stored in tenths of a degree.
+* No floating-point arithmetic is required.
 
-That leaves substantially more SRAM for the stack and application state.
+For example:
 
-### 2. No Adafruit_NeoPixel dependency
-
-The firmware uses a small ATmega AVR-specific WS2812 transmitter based on the hand-tuned 8 MHz AVR timing technique used by established NeoPixel implementations.
-
-The timing-critical routine is intentionally isolated in `ws2812.cpp`.
-
-**Important:** validate the WS2812 waveform with an oscilloscope or logic analyzer on the actual hardware before treating the driver as production-ready.
-
-### 3. DS18B20 CRC validation
-
-The complete 9-byte scratchpad is read and the Dallas/Maxim CRC-8 is checked before accepting a temperature.
-
-### 4. Integer temperature arithmetic
-
-The application stores Fahrenheit in tenths of a degree:
-
-- 98.6 F = 986
-- 95.0 F = 950
-- 99.0 F = 990
-
-No floating-point math is required for temperature conversion or display.
-
-### 5. Single display implementation
-
-The duplicated drawing logic from the original firmware is gone.
-
-All temperature rendering is in `display.cpp`.
-
-### 6. Font data in flash
-
-The seven-segment table is stored in PROGMEM rather than SRAM.
-
-## Display behavior
-
-- 95.0–99.0 F: green
-- >99.0 F: red
-- <95.0 F: blue
-- Sensor failure: four colored corner pixels
-- Fahrenheit indicator: upper-right
-- Temperature digits begin at row 6, preserving the latest visible layout
-
-## Matrix wiring
-
-`ws2812.cpp` currently uses row-major mapping:
-
-`index = y * 16 + x`
-
-If the physical matrix is serpentine, change only `xyToIndex()`.
-
-For a serpentine matrix, use:
-
-```cpp
-return (y & 1)
-    ? static_cast<uint16_t>(y) * WIDTH + (WIDTH - 1 - x)
-    : static_cast<uint16_t>(y) * WIDTH + x;
+```text
+98.6 °F → 986
+37.0 °C → 370
 ```
 
-## Build
+The DS18B20 scratchpad is checked using the Dallas/Maxim CRC-8 before a reading is accepted.
 
-PlatformIO:
+## Display
+
+The temperature uses a compact three-digit display in the center/lower portion of the 16×16 matrix.
+
+The display supports:
+
+* Positive temperatures
+* Negative temperatures
+* Decimal point
+* Fahrenheit (`F`)
+* Celsius (`C`)
+* Temperature-dependent color
+* Sensor-error indication
+
+### Temperature colors
+
+The display uses Fahrenheit thresholds regardless of the currently selected display unit:
+
+| Temperature | Color |
+| ----------- | ----- |
+| Below 95 °F | Blue  |
+| 95–99 °F    | Green |
+| Above 99 °F | Red   |
+
+For example, when the display is set to Celsius, a temperature of 37 °C is still colored according to its Fahrenheit equivalent.
+
+### Fahrenheit / Celsius selection
+
+Pressing the button toggles between:
+
+```text
+F → C → F → C ...
+```
+
+The selected unit is not stored in EEPROM. After a reboot, the display starts in Fahrenheit.
+
+The button uses software debouncing.
+
+Changing the unit redraws the current temperature immediately; it does not wait for another sensor reading.
+
+## Sensor error indication
+
+If the DS18B20 cannot be read successfully, the display shows four colored corner pixels.
+
+| Position     | Color  |
+| ------------ | ------ |
+| Top-left     | Red    |
+| Top-right    | Green  |
+| Bottom-left  | Blue   |
+| Bottom-right | Yellow |
+
+This provides both a clear sensor-error indication and a convenient way to determine the physical orientation of the LED matrix.
+
+A successful sensor reading automatically restores the normal temperature display.
+
+## Temperature update timing
+
+The firmware uses a non-blocking sensor conversion.
+
+The conversion itself takes up to approximately 750 ms at 12-bit resolution. The interval between conversions is controlled by:
+
+```cpp
+constexpr uint32_t TEMP_INTERVAL_MS = 1000;
+```
+
+The interval can be reduced if more frequent updates are desired.
+
+For approximately one temperature update per second, an interval of about **250 ms** provides roughly:
+
+```text
+750 ms sensor conversion
++ 250 ms interval
+≈ 1 second per update
+```
+
+The button remains responsive regardless of the temperature conversion timing.
+
+## LED matrix mapping
+
+The WS2812B driver currently uses row-major pixel mapping:
+
+```text
+index = y * 16 + x
+```
+
+The physical matrix orientation therefore depends on how the matrix is wired.
+
+If the matrix uses serpentine wiring, the coordinate-to-pixel mapping can be adjusted in `ws2812.cpp`.
+
+## Memory usage
+
+The firmware uses a compact one-byte color index for each framebuffer pixel.
+
+For the 256-pixel matrix:
+
+```text
+256 pixels × 1 byte = 256 bytes
+```
+
+This leaves substantially more SRAM available for the application and stack on the ATmega88PV, which has only 1 KB of SRAM.
+
+## Project structure
+
+```text
+src/
+├── main.cpp
+├── display.cpp
+├── display.h
+├── ds18b20.cpp
+├── ds18b20.h
+├── ws2812.cpp
+└── ws2812.h
+```
+
+### `main.cpp`
+
+Handles:
+
+* Main application loop
+* Button input and debouncing
+* Fahrenheit/Celsius selection
+* Temperature update scheduling
+* Sensor conversion state
+* Display updates
+
+### `ds18b20.cpp`
+
+Handles:
+
+* DS18B20 communication
+* Temperature conversion
+* Scratchpad reading
+* CRC validation
+* Celsius/Fahrenheit conversion
+* Non-blocking conversion timing
+
+### `display.cpp`
+
+Handles:
+
+* Temperature rendering
+* Digit rendering
+* Decimal point
+* Minus sign
+* Fahrenheit/Celsius indicator
+* Temperature colors
+* Sensor-error display
+
+### `ws2812.cpp`
+
+Handles:
+
+* WS2812B initialization
+* Pixel framebuffer
+* Color handling
+* WS2812B data transmission
+* Matrix coordinate mapping
+
+## Building
+
+The project uses PlatformIO.
+
+Build the firmware:
 
 ```text
 pio run
 ```
 
-Upload:
+Upload using USBasp:
 
 ```text
 pio run --target upload
 ```
 
-The existing USBasp flags are preserved in `platformio.ini`.
+The USBasp programming configuration is contained in `platformio.ini`.
 
-## RAM target
+## Hardware considerations
 
-The key RAM allocation is now approximately:
+The WS2812B data signal is timing-sensitive when driven directly by an 8 MHz AVR.
 
-- 256 bytes: color-index framebuffer
-- 4 bytes: WS2812 GRB staging buffer
-- 9 bytes: DS18B20 scratchpad
-- a small amount for state/stack
+The WS2812B data line is connected to **PD7**.
 
-This is dramatically safer than a 768-byte RGB framebuffer on a 1024-byte SRAM MCU.
+The DS18B20 requires an external pull-up resistor on its data line. A **4.7 kΩ resistor to VCC** is a typical value.
 
-## Important hardware test
+## Operation
 
-Because the WS2812 driver is timing-sensitive at 8 MHz:
+After power-up:
 
-1. Build the firmware.
-2. Program the ATmega88PV.
-3. Verify a simple all-off frame.
-4. Verify the corner diagnostic frame.
-5. Verify the temperature display.
-6. If the LEDs behave incorrectly, capture PD7 with a logic analyzer or oscilloscope and verify approximately 800 kHz bit timing.
-
-Do not add `Serial`, interrupts, or other timing-sensitive activity to the WS2812 transmit section without re-evaluating the timing.
-
-
-
-## Push-button unit selection
-
-- Button input: **PD2 / Arduino pin 2**
-- Wire the push button between **PD2 and GND**. No external resistor is required; firmware enables the internal pull-up.
-- Each press toggles between **F** and **C**.
-- Fahrenheit is always the default after reboot; the selection is intentionally not stored in EEPROM.
-- Button debounce is 30 ms.
-- Temperature alarm coloring continues to use the original 95–99 °F limits regardless of the selected display unit.
+1. The firmware initializes the LED matrix.
+2. The DS18B20 is read.
+3. The temperature is displayed.
+4. The firmware periodically obtains new temperature readings.
+5. The display remains responsive to the F/C button during sensor conversion.
+6. Pressing the button immediately switches between Fahrenheit and Celsius.
+7. If the sensor fails, the four-corner diagnostic display is shown.
+8. Normal temperature display resumes automatically when a valid sensor reading is obtained.
