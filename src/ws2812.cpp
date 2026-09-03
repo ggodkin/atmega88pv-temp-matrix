@@ -7,6 +7,9 @@ constexpr uint8_t WIDTH = 16;
 constexpr uint8_t HEIGHT = 16;
 constexpr uint8_t LED_MASK = _BV(PD7);
 
+// Set to true when the physical LED matrix is mounted upside down.
+constexpr bool FLIP_180 = true;
+
 // One byte per LED: 0=off, 1=green, 2=red, 3=blue, 4=yellow.
 uint8_t pixels[WS2812::LED_COUNT];
 
@@ -23,8 +26,11 @@ inline uint8_t colorComponent(WS2812::Color c, uint8_t component) {
 }
 
 inline uint16_t xyToIndex(uint8_t x, uint8_t y) {
-  // Current hardware is assumed to be row-major.
-  // For a serpentine matrix, change this function only.
+  if (FLIP_180) {
+    x = WIDTH - 1 - x;
+    y = HEIGHT - 1 - y;
+  }
+
   return static_cast<uint16_t>(y) * WIDTH + x;
 }
 
@@ -128,7 +134,6 @@ inline void sendByte(uint8_t b, uint8_t hi, uint8_t lo) {
     "nop                \n\t"
     "out %[port], %[lo] \n\t"
     "nop                \n\t"
-    "nop                \n\t"
     :
     : [b] "r" (b),
       [hi] "r" (hi),
@@ -186,3 +191,4 @@ void show() {
 }
 
 } // namespace WS2812
+
