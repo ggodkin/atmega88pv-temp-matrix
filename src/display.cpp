@@ -49,7 +49,14 @@ void drawDot(uint8_t x, uint8_t y, Color color) {
   WS2812::setPixel(x, y + 9, color);
 }
 
-void drawF(Color color) {
+void drawUnitC(Color color) {
+  // Compact C in the same upper-right area previously used by F.
+  fillRect(13, 0, 2, 1, color);
+  fillRect(12, 1, 1, 4, color);
+  fillRect(13, 5, 2, 1, color);
+}
+
+void drawUnitF(Color color) {
   fillRect(12, 0, 3, 1, color);
   fillRect(12, 1, 1, 4, color);
   fillRect(13, 2, 2, 1, color);
@@ -78,40 +85,59 @@ void drawTemperatureF10(int16_t fahrenheit10) {
   clear();
 
   const Color color = temperatureColor(fahrenheit10);
-
-  // Preserve the current repository's visible layout:
-  // digits start at y=6 and the F occupies the upper-right corner.
   constexpr uint8_t y = 6;
 
   if (fahrenheit10 >= 0 && fahrenheit10 < 1000) {
-    // 0.0 through 99.9
     const uint16_t value = static_cast<uint16_t>(fahrenheit10);
-
-    const uint8_t d1 = static_cast<uint8_t>((value / 100) % 10);
-    const uint8_t d2 = static_cast<uint8_t>((value / 10) % 10);
-    const uint8_t d3 = static_cast<uint8_t>(value % 10);
-
-    drawDigit(1,  y, d1, color);
-    drawDigit(6,  y, d2, color);
-    drawDigit(11, y, d3, color);
+    drawDigit(1,  y, static_cast<uint8_t>((value / 100) % 10), color);
+    drawDigit(6,  y, static_cast<uint8_t>((value / 10) % 10), color);
+    drawDigit(11, y, static_cast<uint8_t>(value % 10), color);
     drawDot(10, y, color);
   } else if (fahrenheit10 >= 1000) {
-    // 100.0 and above: display rounded integer.
     uint16_t value = static_cast<uint16_t>((fahrenheit10 + 5) / 10);
     if (value > 999) value = 999;
-
     drawDigit(1,  y, static_cast<uint8_t>((value / 100) % 10), color);
-    drawDigit(6,  y, static_cast<uint8_t>((value / 10) % 10),  color);
-    drawDigit(11, y, static_cast<uint8_t>(value % 10),           color);
+    drawDigit(6,  y, static_cast<uint8_t>((value / 10) % 10), color);
+    drawDigit(11, y, static_cast<uint8_t>(value % 10), color);
   } else {
-    // Negative temperatures are outside the original UI. Show 000 rather
-    // than producing invalid digit arithmetic.
-    drawDigit(1,  y, 0, color);
-    drawDigit(6,  y, 0, color);
+    drawDigit(1, y, 0, color);
+    drawDigit(6, y, 0, color);
     drawDigit(11, y, 0, color);
   }
 
-  drawF(color);
+  drawUnitF(color);
+  WS2812::show();
+}
+
+void drawTemperatureC10(int16_t celsius10, int16_t fahrenheit10) {
+  clear();
+
+  // Keep alarm coloring based on the original Fahrenheit thresholds so the
+  // physical temperature limits do not change when the display unit changes.
+  const Color color = temperatureColor(fahrenheit10);
+  constexpr uint8_t y = 6;
+
+  // Display one decimal place for temperatures in the normal range.
+  if (celsius10 >= 0 && celsius10 < 1000) {
+    const uint16_t value = static_cast<uint16_t>(celsius10);
+    drawDigit(1,  y, static_cast<uint8_t>((value / 100) % 10), color);
+    drawDigit(6,  y, static_cast<uint8_t>((value / 10) % 10), color);
+    drawDigit(11, y, static_cast<uint8_t>(value % 10), color);
+    drawDot(10, y, color);
+  } else if (celsius10 >= 1000) {
+    uint16_t value = static_cast<uint16_t>((celsius10 + 5) / 10);
+    if (value > 999) value = 999;
+    drawDigit(1,  y, static_cast<uint8_t>((value / 100) % 10), color);
+    drawDigit(6,  y, static_cast<uint8_t>((value / 10) % 10), color);
+    drawDigit(11, y, static_cast<uint8_t>(value % 10), color);
+  } else {
+    // Negative Celsius values are outside the original UI layout.
+    drawDigit(1, y, 0, color);
+    drawDigit(6, y, 0, color);
+    drawDigit(11, y, 0, color);
+  }
+
+  drawUnitC(color);
   WS2812::show();
 }
 

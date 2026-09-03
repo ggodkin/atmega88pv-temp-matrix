@@ -10,5 +10,6 @@ namespace Display {
   void begin();
   void clear();
   void drawTemperatureF10(int16_t fahrenheit10);
+  void drawTemperatureC10(int16_t celsius10, int16_t fahrenheit10);
   void drawSensorError();
 }

@@ -132,3 +132,13 @@ Because the WS2812 driver is timing-sensitive at 8 MHz:
 
 Do not add `Serial`, interrupts, or other timing-sensitive activity to the WS2812 transmit section without re-evaluating the timing.
 
+
+
+## Push-button unit selection
+
+- Button input: **PD2 / Arduino pin 2**
+- Wire the push button between **PD2 and GND**. No external resistor is required; firmware enables the internal pull-up.
+- Each press toggles between **F** and **C**.
+- Fahrenheit is always the default after reboot; the selection is intentionally not stored in EEPROM.
+- Button debounce is 30 ms.
+- Temperature alarm coloring continues to use the original 95–99 °F limits regardless of the selected display unit.
