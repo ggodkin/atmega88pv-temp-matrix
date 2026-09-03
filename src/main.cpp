@@ -59,13 +59,13 @@ void loop() {
     lastButtonState = buttonState;
   }
 
+  static bool buttonHandled = false;
+
   if (buttonState == LOW &&
       (now - lastButtonMs) >= DEBOUNCE_MS) {
 
-    static bool handled = false;
-
-    if (!handled) {
-      handled = true;
+    if (!buttonHandled) {
+      buttonHandled = true;
 
       unit =
           (unit == Unit::Fahrenheit)
@@ -83,12 +83,10 @@ void loop() {
         }
       }
     }
-  }
 
-  if (buttonState == HIGH) {
-    static bool dummy = false;
-    dummy = false;
-    (void)dummy;
+  } else if (buttonState == HIGH) {
+    // Button released: re-arm for the next press.
+    buttonHandled = false;
   }
 
   if (!haveTemperature ||
@@ -97,7 +95,6 @@ void loop() {
     lastTempMs = now;
 
     int16_t newF10;
-
     if (DS18B20::readTemperatureF10(newF10)) {
       fahrenheit10 = newF10;
 
