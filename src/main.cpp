@@ -53,6 +53,8 @@ void loop() {
 
   // ------------------------------------------------------------
   // Button: active low, internal pull-up.
+  // The button is serviced continuously, including while the
+  // DS18B20 is performing its 750 ms conversion.
   // ------------------------------------------------------------
 
   const bool buttonState = digitalRead(BUTTON_PIN);
@@ -70,11 +72,23 @@ void loop() {
     if (!buttonHandled) {
       buttonHandled = true;
 
-      // Toggle temperature unit only.
+      // Toggle temperature unit.
       unit =
           (unit == Unit::Fahrenheit)
               ? Unit::Celsius
               : Unit::Fahrenheit;
+
+      // Immediately redraw using the new unit.
+      if (haveTemperature) {
+        if (unit == Unit::Fahrenheit) {
+          Display::drawTemperatureF10(fahrenheit10);
+        } else {
+          Display::drawTemperatureC10(
+              celsius10,
+              fahrenheit10
+          );
+        }
+      }
     }
 
   } else if (buttonState == HIGH) {
@@ -82,18 +96,19 @@ void loop() {
     buttonHandled = false;
   }
 
-
   // ------------------------------------------------------------
-  // Start a new temperature conversion.
+  // Temperature conversion state.
   // ------------------------------------------------------------
 
   static bool conversionRequested = false;
+  static uint32_t lastConversionMs = 0;
 
+  // Start the first conversion immediately, then start each
+  // subsequent conversion TEMP_INTERVAL_MS after the previous
+  // conversion completed.
   if (!conversionRequested &&
       (!haveTemperature ||
-       (now - lastTempMs) >= TEMP_INTERVAL_MS)) {
-
-    lastTempMs = now;
+       (now - lastConversionMs) >= TEMP_INTERVAL_MS)) {
 
     if (DS18B20::startConversion()) {
       conversionRequested = true;
@@ -103,12 +118,11 @@ void loop() {
     }
   }
 
-
   // ------------------------------------------------------------
-  // Check whether the DS18B20 conversion has finished.
+  // Check for completed DS18B20 conversion.
   //
-  // IMPORTANT: This does NOT wait. The button continues to
-  // be serviced while the sensor is converting.
+  // This does NOT block. The loop continues running, so the
+  // button remains responsive during the 750 ms conversion.
   // ------------------------------------------------------------
 
   if (conversionRequested &&
@@ -119,6 +133,7 @@ void loop() {
     conversionRequested = false;
 
     if (DS18B20::readTemperatureF10AfterConversion(newF10)) {
+
       fahrenheit10 = newF10;
 
       // F10 -> C10:
@@ -137,27 +152,27 @@ void loop() {
       celsius10 = static_cast<int16_t>(value);
       haveTemperature = true;
 
+      // This is the reference point for the next reading.
+      // Therefore TEMP_INTERVAL_MS means approximately the
+      // time between displayed temperature updates.
+      lastConversionMs = millis();
+
+      // Immediately display the newly measured temperature.
+      if (unit == Unit::Fahrenheit) {
+        Display::drawTemperatureF10(fahrenheit10);
+      } else {
+        Display::drawTemperatureC10(
+            celsius10,
+            fahrenheit10
+        );
+      }
+
     } else {
       haveTemperature = false;
       Display::drawSensorError();
-    }
-  }
 
-
-  // ------------------------------------------------------------
-  // Draw the current temperature using the selected unit.
-  // ------------------------------------------------------------
-
-  if (haveTemperature) {
-
-    if (unit == Unit::Fahrenheit) {
-      Display::drawTemperatureF10(fahrenheit10);
-
-    } else {
-      Display::drawTemperatureC10(
-          celsius10,
-          fahrenheit10
-      );
+      // Allow another attempt after the normal interval.
+      lastConversionMs = millis();
     }
   }
 }
