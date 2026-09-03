@@ -67,21 +67,11 @@ void loop() {
     if (!buttonHandled) {
       buttonHandled = true;
 
+      // Toggle temperature unit only.
       unit =
           (unit == Unit::Fahrenheit)
               ? Unit::Celsius
               : Unit::Fahrenheit;
-
-      if (haveTemperature) {
-        if (unit == Unit::Fahrenheit) {
-          Display::drawTemperatureF10(fahrenheit10);
-        } else {
-          Display::drawTemperatureC10(
-              celsius10,
-              fahrenheit10
-          );
-        }
-      }
     }
 
   } else if (buttonState == HIGH) {
@@ -89,12 +79,14 @@ void loop() {
     buttonHandled = false;
   }
 
+  // Read/update temperature periodically.
   if (!haveTemperature ||
       (now - lastTempMs) >= TEMP_INTERVAL_MS) {
 
     lastTempMs = now;
 
     int16_t newF10;
+
     if (DS18B20::readTemperatureF10(newF10)) {
       fahrenheit10 = newF10;
 
@@ -111,19 +103,21 @@ void loop() {
 
       celsius10 = static_cast<int16_t>(value);
       haveTemperature = true;
-
-      if (unit == Unit::Fahrenheit) {
-        Display::drawTemperatureF10(fahrenheit10);
-      } else {
-        Display::drawTemperatureC10(
-            celsius10,
-            fahrenheit10
-        );
-      }
-
     } else {
       haveTemperature = false;
       Display::drawSensorError();
+    }
+  }
+
+  // Draw the current temperature using the selected unit.
+  if (haveTemperature) {
+    if (unit == Unit::Fahrenheit) {
+      Display::drawTemperatureF10(fahrenheit10);
+    } else {
+      Display::drawTemperatureC10(
+          celsius10,
+          fahrenheit10
+      );
     }
   }
 }
