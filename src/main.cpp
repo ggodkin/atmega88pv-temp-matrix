@@ -3,7 +3,7 @@
 #include "ds18b20.h"
 
 constexpr uint8_t BUTTON_PIN = 2;
-constexpr uint32_t TEMP_INTERVAL_MS = 2000;
+constexpr uint32_t TEMP_INTERVAL_MS = 1000;
 constexpr uint32_t DEBOUNCE_MS = 30;
 
 enum class Unit : uint8_t {
@@ -51,7 +51,10 @@ void setup() {
 void loop() {
   const uint32_t now = millis();
 
+  // ------------------------------------------------------------
   // Button: active low, internal pull-up.
+  // ------------------------------------------------------------
+
   const bool buttonState = digitalRead(BUTTON_PIN);
 
   if (buttonState != lastButtonState) {
@@ -75,21 +78,51 @@ void loop() {
     }
 
   } else if (buttonState == HIGH) {
-    // Button released: re-arm for the next press.
+    // Button released: re-arm for next press.
     buttonHandled = false;
   }
 
-  // Read/update temperature periodically.
-  if (!haveTemperature ||
-      (now - lastTempMs) >= TEMP_INTERVAL_MS) {
+
+  // ------------------------------------------------------------
+  // Start a new temperature conversion.
+  // ------------------------------------------------------------
+
+  static bool conversionRequested = false;
+
+  if (!conversionRequested &&
+      (!haveTemperature ||
+       (now - lastTempMs) >= TEMP_INTERVAL_MS)) {
 
     lastTempMs = now;
 
+    if (DS18B20::startConversion()) {
+      conversionRequested = true;
+    } else {
+      haveTemperature = false;
+      Display::drawSensorError();
+    }
+  }
+
+
+  // ------------------------------------------------------------
+  // Check whether the DS18B20 conversion has finished.
+  //
+  // IMPORTANT: This does NOT wait. The button continues to
+  // be serviced while the sensor is converting.
+  // ------------------------------------------------------------
+
+  if (conversionRequested &&
+      DS18B20::conversionReady()) {
+
     int16_t newF10;
 
-    if (DS18B20::readTemperatureF10(newF10)) {
+    conversionRequested = false;
+
+    if (DS18B20::readTemperatureF10AfterConversion(newF10)) {
       fahrenheit10 = newF10;
 
+      // F10 -> C10:
+      // C10 = (F10 - 320) * 5 / 9
       int32_t value =
           (static_cast<int32_t>(fahrenheit10) - 320L) * 5L;
 
@@ -103,16 +136,23 @@ void loop() {
 
       celsius10 = static_cast<int16_t>(value);
       haveTemperature = true;
+
     } else {
       haveTemperature = false;
       Display::drawSensorError();
     }
   }
 
+
+  // ------------------------------------------------------------
   // Draw the current temperature using the selected unit.
+  // ------------------------------------------------------------
+
   if (haveTemperature) {
+
     if (unit == Unit::Fahrenheit) {
       Display::drawTemperatureF10(fahrenheit10);
+
     } else {
       Display::drawTemperatureC10(
           celsius10,
