@@ -163,9 +163,9 @@ void drawMinus(
 
 void drawUnitC(WS2812::Color color) {
   fillRect(
-      13,
+      12,
       0,
-      2,
+      3,
       1,
       color);
 
@@ -173,13 +173,13 @@ void drawUnitC(WS2812::Color color) {
       12,
       1,
       1,
-      4,
+      3,
       color);
 
   fillRect(
-      13,
-      5,
-      2,
+      12,
+      4,
+      3,
       1,
       color);
 }
