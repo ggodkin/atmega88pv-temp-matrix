@@ -2,82 +2,131 @@
 #include "display.h"
 #include "ds18b20.h"
 
-// ATmega88PV @ 8 MHz
-//
-// Hardware:
-//   PD7 -> WS2812B DIN
-//   PD4 -> DS18B20 DQ
-//   PD2 -> push button (other side to GND)
-//
-// The DS18B20 requires an external pull-up resistor on DQ.
+constexpr uint8_t BUTTON_PIN = 2;
+constexpr uint32_t TEMP_INTERVAL_MS = 2000;
+constexpr uint32_t DEBOUNCE_MS = 30;
 
-constexpr uint32_t SAMPLE_INTERVAL_MS = 2000UL;
-constexpr uint8_t BUTTON_PIN = 2;       // PD2 / INT0
-constexpr uint16_t BUTTON_DEBOUNCE_MS = 30;
+enum class Unit : uint8_t {
+  Fahrenheit,
+  Celsius
+};
 
-int16_t lastTemperatureF10 = 0;
+Unit unit = Unit::Fahrenheit;
+
+uint32_t lastTempMs = 0;
+uint32_t lastButtonMs = 0;
+bool lastButtonState = HIGH;
+
+int16_t celsius10 = 0;
+int16_t fahrenheit10 = 0;
 bool haveTemperature = false;
-uint32_t nextSampleMs = 0;
-bool celsiusMode = false;              // Fahrenheit is always the boot default.
-bool buttonStableState = HIGH;
-bool buttonLastReading = HIGH;
-uint32_t buttonChangedMs = 0;
 
 void setup() {
-  Display::begin();
   pinMode(BUTTON_PIN, INPUT_PULLUP);
 
-  // Start in the same four-corner diagnostic state used by the original.
-  Display::drawSensorError();
+  Display::begin();
 
-  nextSampleMs = millis();
+  if (DS18B20::readTemperatureF10(fahrenheit10)) {
+    // F10 -> C10:
+    // C10 = (F10 - 320) * 5 / 9
+    int32_t value =
+        (static_cast<int32_t>(fahrenheit10) - 320L) * 5L;
+
+    if (value >= 0) {
+      value += 4;
+    } else {
+      value -= 4;
+    }
+
+    value /= 9;
+    celsius10 = static_cast<int16_t>(value);
+
+    haveTemperature = true;
+    Display::drawTemperatureF10(fahrenheit10);
+  } else {
+    Display::drawSensorError();
+  }
 }
 
 void loop() {
   const uint32_t now = millis();
 
-  // Active-low push button with simple debounce. A press toggles the display
-  // unit; the selected unit is intentionally not stored in EEPROM, so every
-  // reboot starts in Fahrenheit.
-  const bool reading = digitalRead(BUTTON_PIN);
-  if (reading != buttonLastReading) {
-    buttonChangedMs = now;
-    buttonLastReading = reading;
+  // Button: active low, internal pull-up.
+  const bool buttonState = digitalRead(BUTTON_PIN);
+
+  if (buttonState != lastButtonState) {
+    lastButtonMs = now;
+    lastButtonState = buttonState;
   }
 
-  if (static_cast<uint32_t>(now - buttonChangedMs) >= BUTTON_DEBOUNCE_MS &&
-      reading != buttonStableState) {
-    buttonStableState = reading;
+  if (buttonState == LOW &&
+      (now - lastButtonMs) >= DEBOUNCE_MS) {
 
-    if (buttonStableState == LOW && haveTemperature) {
-      celsiusMode = !celsiusMode;
+    static bool handled = false;
 
-      if (celsiusMode) {
-        const int32_t c10 = (static_cast<int32_t>(lastTemperatureF10) - 320L) * 5L / 9L;
-        Display::drawTemperatureC10(static_cast<int16_t>(c10), lastTemperatureF10);
-      } else {
-        Display::drawTemperatureF10(lastTemperatureF10);
+    if (!handled) {
+      handled = true;
+
+      unit =
+          (unit == Unit::Fahrenheit)
+              ? Unit::Celsius
+              : Unit::Fahrenheit;
+
+      if (haveTemperature) {
+        if (unit == Unit::Fahrenheit) {
+          Display::drawTemperatureF10(fahrenheit10);
+        } else {
+          Display::drawTemperatureC10(
+              celsius10,
+              fahrenheit10
+          );
+        }
       }
     }
   }
 
-  if (!haveTemperature || static_cast<int32_t>(now - nextSampleMs) >= 0) {
-    int16_t fahrenheit10;
+  if (buttonState == HIGH) {
+    static bool dummy = false;
+    dummy = false;
+    (void)dummy;
+  }
 
-    if (DS18B20::readTemperatureF10(fahrenheit10)) {
-      lastTemperatureF10 = fahrenheit10;
-      haveTemperature = true;
-      if (celsiusMode) {
-        const int32_t c10 = (static_cast<int32_t>(lastTemperatureF10) - 320L) * 5L / 9L;
-        Display::drawTemperatureC10(static_cast<int16_t>(c10), lastTemperatureF10);
+  if (!haveTemperature ||
+      (now - lastTempMs) >= TEMP_INTERVAL_MS) {
+
+    lastTempMs = now;
+
+    int16_t newF10;
+
+    if (DS18B20::readTemperatureF10(newF10)) {
+      fahrenheit10 = newF10;
+
+      int32_t value =
+          (static_cast<int32_t>(fahrenheit10) - 320L) * 5L;
+
+      if (value >= 0) {
+        value += 4;
       } else {
-        Display::drawTemperatureF10(lastTemperatureF10);
+        value -= 4;
       }
+
+      value /= 9;
+
+      celsius10 = static_cast<int16_t>(value);
+      haveTemperature = true;
+
+      if (unit == Unit::Fahrenheit) {
+        Display::drawTemperatureF10(fahrenheit10);
+      } else {
+        Display::drawTemperatureC10(
+            celsius10,
+            fahrenheit10
+        );
+      }
+
     } else {
       haveTemperature = false;
       Display::drawSensorError();
     }
-
-    nextSampleMs = millis() + SAMPLE_INTERVAL_MS;
   }
 }
