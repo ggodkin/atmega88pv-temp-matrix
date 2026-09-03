@@ -14,27 +14,10 @@ constexpr uint8_t DECIMAL_X = 10;
 constexpr int16_t LOW_F10 = 950;
 constexpr int16_t HIGH_F10 = 990;
 
-// Seven-segment bits:
-// 0 top
-// 1 upper-right
-// 2 lower-right
-// 3 bottom
-// 4 lower-left
-// 5 upper-left
-// 6 middle
 
-const uint8_t SEGMENT_MASK[10] PROGMEM = {
-  0b0111111,  // 0
-  0b0000110,  // 1
-  0b1011011,  // 2
-  0b1001111,  // 3
-  0b1100110,  // 4
-  0b1101101,  // 5
-  0b1111101,  // 6
-  0b0000111,  // 7
-  0b1111111,  // 8
-  0b1101111   // 9
-};
+// ------------------------------------------------------------
+// Rectangle helper
+// ------------------------------------------------------------
 
 void fillRect(
     uint8_t x,
@@ -53,6 +36,157 @@ void fillRect(
   }
 }
 
+
+// ------------------------------------------------------------
+// Rounded 4x9 digit font
+//
+// Each digit is exactly 4 pixels wide x 9 pixels high.
+//
+// Bit 3 = leftmost pixel
+// Bit 0 = rightmost pixel
+//
+// The digit footprint is unchanged from the original
+// seven-segment implementation.
+// ------------------------------------------------------------
+
+const uint8_t DIGIT_GLYPHS[10][9] PROGMEM = {
+
+  // 0
+  {
+    0b0110,
+    0b1001,
+    0b1001,
+    0b1001,
+    0b1001,
+    0b1001,
+    0b1001,
+    0b1001,
+    0b0110
+  },
+
+  // 1
+  {
+    0b0010,
+    0b0110,
+    0b0010,
+    0b0010,
+    0b0010,
+    0b0010,
+    0b0010,
+    0b0010,
+    0b0111
+  },
+
+  // 2
+  {
+    0b0110,
+    0b1001,
+    0b0001,
+    0b0010,
+    0b0100,
+    0b1000,
+    0b1000,
+    0b1001,
+    0b1111
+  },
+
+  // 3
+  {
+    0b0110,
+    0b1001,
+    0b0001,
+    0b0010,
+    0b0110,
+    0b0001,
+    0b0001,
+    0b1001,
+    0b0110
+  },
+
+  // 4
+  {
+    0b1001,
+    0b1001,
+    0b1001,
+    0b1001,
+    0b1111,
+    0b0001,
+    0b0001,
+    0b0001,
+    0b0001
+  },
+
+  // 5
+  {
+    0b1111,
+    0b1000,
+    0b1000,
+    0b1110,
+    0b0001,
+    0b0001,
+    0b0001,
+    0b1001,
+    0b0110
+  },
+
+  // 6
+  {
+    0b0110,
+    0b1001,
+    0b1000,
+    0b1000,
+    0b1110,
+    0b1001,
+    0b1001,
+    0b1001,
+    0b0110
+  },
+
+  // 7
+  {
+    0b1111,
+    0b0001,
+    0b0010,
+    0b0010,
+    0b0100,
+    0b0100,
+    0b0100,
+    0b0100,
+    0b0100
+  },
+
+  // 8
+  {
+    0b0110,
+    0b1001,
+    0b1001,
+    0b0110,
+    0b1001,
+    0b1001,
+    0b1001,
+    0b1001,
+    0b0110
+  },
+
+  // 9
+  {
+    0b0110,
+    0b1001,
+    0b1001,
+    0b0111,
+    0b0001,
+    0b0001,
+    0b0001,
+    0b1001,
+    0b0110
+  }
+};
+
+
+// ------------------------------------------------------------
+// Digit renderer
+// ------------------------------------------------------------
+
 void drawDigit(
     uint8_t x,
     uint8_t y,
@@ -63,79 +197,30 @@ void drawDigit(
     return;
   }
 
-  const uint8_t s =
-      pgm_read_byte(&SEGMENT_MASK[digit]);
+  for (uint8_t row = 0; row < 9; ++row) {
 
-  // Top
-  fillRect(
-      x + 1,
-      y,
-      2,
-      1,
-      (s & _BV(0))
-          ? color
-          : WS2812::OFF);
+    const uint8_t pixels =
+        pgm_read_byte(&DIGIT_GLYPHS[digit][row]);
 
-  // Upper-right
-  fillRect(
-      x + 3,
-      y + 1,
-      1,
-      3,
-      (s & _BV(1))
-          ? color
-          : WS2812::OFF);
+    for (uint8_t col = 0; col < 4; ++col) {
 
-  // Lower-right
-  fillRect(
-      x + 3,
-      y + 5,
-      1,
-      3,
-      (s & _BV(2))
-          ? color
-          : WS2812::OFF);
+      const bool on =
+          pixels & (1 << (3 - col));
 
-  // Bottom
-  fillRect(
-      x + 1,
-      y + 8,
-      2,
-      1,
-      (s & _BV(3))
-          ? color
-          : WS2812::OFF);
-
-  // Lower-left
-  fillRect(
-      x,
-      y + 5,
-      1,
-      3,
-      (s & _BV(4))
-          ? color
-          : WS2812::OFF);
-
-  // Upper-left
-  fillRect(
-      x,
-      y + 1,
-      1,
-      3,
-      (s & _BV(5))
-          ? color
-          : WS2812::OFF);
-
-  // Middle
-  fillRect(
-      x + 1,
-      y + 4,
-      2,
-      1,
-      (s & _BV(6))
-          ? color
-          : WS2812::OFF);
+      WS2812::setPixel(
+          x + col,
+          y + row,
+          on
+              ? color
+              : WS2812::OFF);
+    }
+  }
 }
+
+
+// ------------------------------------------------------------
+// Decimal point
+// ------------------------------------------------------------
 
 void drawDot(
     uint8_t x,
@@ -147,6 +232,11 @@ void drawDot(
       y + 9,
       color);
 }
+
+
+// ------------------------------------------------------------
+// Minus sign
+// ------------------------------------------------------------
 
 void drawMinus(
     uint8_t x,
@@ -160,6 +250,11 @@ void drawMinus(
       1,
       color);
 }
+
+
+// ------------------------------------------------------------
+// Celsius indicator
+// ------------------------------------------------------------
 
 void drawUnitC(WS2812::Color color) {
   fillRect(
@@ -184,6 +279,11 @@ void drawUnitC(WS2812::Color color) {
       color);
 }
 
+
+// ------------------------------------------------------------
+// Fahrenheit indicator
+// ------------------------------------------------------------
+
 void drawUnitF(WS2812::Color color) {
   fillRect(
       12,
@@ -207,6 +307,11 @@ void drawUnitF(WS2812::Color color) {
       color);
 }
 
+
+// ------------------------------------------------------------
+// Temperature color
+// ------------------------------------------------------------
+
 WS2812::Color temperatureColor(int16_t f10) {
   if (f10 >= LOW_F10 && f10 <= HIGH_F10) {
     return WS2812::GREEN;
@@ -218,6 +323,11 @@ WS2812::Color temperatureColor(int16_t f10) {
 
   return WS2812::BLUE;
 }
+
+
+// ------------------------------------------------------------
+// Signed temperature renderer
+// ------------------------------------------------------------
 
 /*
  * Display a signed temperature using exactly three character positions.
@@ -253,6 +363,7 @@ WS2812::Color temperatureColor(int16_t f10) {
  *
  * Values outside the displayable range are clamped.
  */
+
 void drawSignedTemperature(
     int16_t value10,
     WS2812::Color color
@@ -476,6 +587,10 @@ void drawSignedTemperature(
 } // namespace
 
 
+// ============================================================
+// Public Display interface
+// ============================================================
+
 namespace Display {
 
 void begin() {
@@ -483,9 +598,11 @@ void begin() {
   clear();
 }
 
+
 void clear() {
   WS2812::clear();
 }
+
 
 void drawTemperatureF10(
     int16_t fahrenheit10
@@ -503,6 +620,7 @@ void drawTemperatureF10(
 
   WS2812::show();
 }
+
 
 void drawTemperatureC10(
     int16_t celsius10,
@@ -526,24 +644,29 @@ void drawTemperatureC10(
   WS2812::show();
 }
 
+
 void drawSensorError() {
   clear();
 
+  // Top-left
   WS2812::setPixel(
       0,
       0,
       WS2812::RED);
 
+  // Top-right
   WS2812::setPixel(
       WIDTH - 1,
       0,
       WS2812::GREEN);
 
+  // Bottom-left
   WS2812::setPixel(
       0,
       HEIGHT - 1,
       WS2812::BLUE);
 
+  // Bottom-right
   WS2812::setPixel(
       WIDTH - 1,
       HEIGHT - 1,
